@@ -427,7 +427,7 @@ class megad extends module
     function propertySetHandle($object, $property, $value)
     {
         $properties = SQLSelect("SELECT ID FROM megadproperties WHERE LINKED_OBJECT LIKE '" . DBSafe($object) . "' AND LINKED_PROPERTY LIKE '" . DBSafe($property) . "'");
-        $total = count($properties);
+        $total = is_array($properties) ? count($properties) : 0;
         if ($total) {
             $this->getConfig();
             for ($i = 0; $i < $total; $i++) {
@@ -460,6 +460,7 @@ class megad extends module
 
         $ecmd = '';
 
+        $rec = array();
         if ($mdid) {
             $rec = SQLSelectOne("SELECT * FROM megaddevices WHERE MDID='" . trim($mdid) . "'");
         }
@@ -501,15 +502,13 @@ class megad extends module
                 $v = $_GET['v'];
             }
 
-            $m = $_GET['m'];
-            $pt = $_GET['pt'];
-            $at = $_GET['at'];
-            $dir = $_GET['dir'];
-            $cnt = $_GET['cnt'];
+            $m = $_GET['m'] ?? null;
+            $pt = $_GET['pt'] ?? null;
+            $at = $_GET['at'] ?? null;
+            $dir = $_GET['dir'] ?? null;
+            $cnt = $_GET['cnt'] ?? null;
 
-
-
-            if (isset($_GET['sms'])==1) {
+            if (isset($_GET['sms'])) {
 /*                debmes('sms:'.$_GET['sms'],'megad');
                 $prop = SQLSelectOne("SELECT * FROM megadproperties WHERE DEVICE_ID=" . $rec['ID'] . " AND NUM=100 AND COMMAND='alarmwrn'");
                 $prop['COMMAND'] = 'alarmwrn';
@@ -603,15 +602,15 @@ class megad extends module
                     }
                 }
 
-                if ($_GET['wg']) {
+                if (isset($_GET['wg']) && $_GET['wg'] !== '') {
                     $value = $_GET['wg'];
                     $cmd = array('NUM' => $pt, 'VALUE' => $value, 'COMMAND' => 'wiegand');
                     $commands[] = $cmd;
-                } elseif ($_GET['ib']) {
+                } elseif (isset($_GET['ib']) && $_GET['ib'] !== '') {
                     $value = $_GET['ib'];
                     $cmd = array('NUM' => $pt, 'VALUE' => $value, 'COMMAND' => 'ibutton');
                     $commands[] = $cmd;
-                } elseif ($_GET['click']) {
+                } elseif (isset($_GET['click']) && $_GET['click'] !== '') {
                     $value = $_GET['click'];
                     $command = 'click';
                     if ($value == 2) {
@@ -668,7 +667,7 @@ class megad extends module
     function updateDevices()
     {
         $devices = SQLSelect("SELECT * FROM megaddevices WHERE UPDATE_PERIOD>0 AND NEXT_UPDATE<=NOW()");
-        $total = count($devices);
+        $total = is_array($devices) ? count($devices) : 0;
         for ($i = 0; $i < $total; $i++) {
             $devices[$i]['NEXT_UPDATE'] = date('Y-m-d H:i:s', time() + $devices[$i]['UPDATE_PERIOD']);
             SQLUpdate('megaddevices', $devices[$i]);
@@ -809,7 +808,7 @@ class megad extends module
             $prop['ID'] = SQLInsert('megadproperties', $prop);
         }
 
-        $prop['CURRENT_VALUE_STRING'] = $command['VALUE'];
+        $prop['CURRENT_VALUE_STRING'] = 0;
         if ($old_value != $prop['CURRENT_VALUE_STRING']) {
             $prop['UPDATED'] = date('Y-m-d H:i:s');
             $prop['CURRENT_VALUE'] = 0;
@@ -892,7 +891,7 @@ class megad extends module
     function restoreDeviceStatus($device_id)
     {
         $properties = SQLSelect("SELECT * FROM megadproperties WHERE DEVICE_ID=" . $device_id);
-        $total = count($properties);
+        $total = is_array($properties) ? count($properties) : 0;
         for ($i = 0; $i < $total; $i++) {
             if ($properties[$i]['COMMAND'] == 'output' && $properties[$i]['CURRENT_VALUE_STRING']) {
                 $this->sendCommand($properties[$i]['DEVICE_ID'], $properties[$i]['NUM'] . ':' . $properties[$i]['CURRENT_VALUE_STRING']);
@@ -931,6 +930,9 @@ class megad extends module
         }
 
         $local_ip = '';
+        if (!is_array($find_ip)) {
+            $find_ip = array();
+        }
         foreach ($find_ip as $iface => $iface_ip) {
             if ((preg_match("/^192\.168/", $find_ip[$iface]) || preg_match("/^10\./", $find_ip[$iface]))) {
                 $local_ip = $find_ip[$iface];
@@ -944,7 +946,7 @@ class megad extends module
 
     function get_local_ip_linux()
     {
-        $out = explode(PHP_EOL, shell_exec("/sbin/ifconfig"));
+        $out = explode(PHP_EOL, (string)shell_exec("/sbin/ifconfig"));
         $local_addrs = array();
         $ifname = 'unknown';
         foreach ($out as $str) {
@@ -961,7 +963,7 @@ class megad extends module
 
     function get_local_ip_win()
     {
-        $out = explode("\n", shell_exec("ipconfig"));
+        $out = explode("\n", (string)shell_exec("ipconfig"));
 
         $local_addrs = array();
         foreach ($out as $str) {
