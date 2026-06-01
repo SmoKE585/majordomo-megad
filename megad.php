@@ -15,6 +15,9 @@ if ($megad->config['API_DEBUG']) {
 }
 
 $result = $megad->processRequest();
+if ($result === null || $result === false || $result === '') {
+    $result = 'OK';
+}
 if ($megad->config['API_DEBUG']) {
     DebMes("Result: " . $result, 'megad');
 }

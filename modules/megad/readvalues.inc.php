@@ -5,13 +5,16 @@ $record = SQLSelectOne("SELECT * FROM megaddevices WHERE ID='" . (int)$id . "'")
 $url = 'http://' . $record['IP'] . '/' . $record['PASSWORD'] . '/?cmd=all';
 if ($all) {
     $stateData = $all;
+    if ($this->config['API_DEBUG']) {
+        DebMes("POLL: using webhook payload for device ID=" . (int)$record['ID'], 'megad');
+    }
 } else {
     if ($this->config['API_DEBUG']) {
-        DebMes("Reading state:\n" . $url, 'megad');
+        DebMes("POLL: reading state for device ID=" . (int)$record['ID'] . " IP=" . $record['IP'] . "\n" . $url, 'megad');
     }
     $stateData = getURL($url, 0);
     if ($this->config['API_DEBUG']) {
-        DebMes("State response:\n" . $stateData, 'megad');
+        DebMes("POLL: state response for device ID=" . (int)$record['ID'] . "\n" . $stateData, 'megad');
     }
 }
 if (gr('debug')) {
@@ -290,6 +293,10 @@ if ($stateData != '' && isset($i2c_properties[0]) && isset($i2c_properties[0]['I
 
 foreach ($commands as $command) {
     $this->processCommand($record['ID'], $command);
+}
+
+if ($this->config['API_DEBUG']) {
+    DebMes("POLL: parsed " . count($commands) . " command(s) for device ID=" . (int)$record['ID'], 'megad');
 }
 
 if (gr('debug')) {

@@ -457,6 +457,7 @@ class megad extends module
         $mdid = gr('mdid');
         $st = gr('st');
         $ip = $_SERVER['REMOTE_ADDR'];
+        $request_uri = $_SERVER['REQUEST_URI'] ?? '';
 
         $ecmd = '';
 
@@ -474,7 +475,7 @@ class megad extends module
         if (!$rec['ID']) {
             $rec = SQLSelectOne("SELECT * FROM megaddevices WHERE IP='" . $ip . "'");
             if ($this->config['API_DEBUG']) {
-                debmes('found by ip '.$rec['ID'],'megad');
+                debmes('WEBHOOK: device lookup by IP=' . $ip . ' => ID=' . (int)$rec['ID'], 'megad');
             }
         }
 
@@ -486,8 +487,14 @@ class megad extends module
             $rec['MDID'] = trim($mdid);
             $rec['PASSWORD'] = 'sec';
             $rec['ID'] = SQLInsert('megaddevices', $rec);
+            if ($this->config['API_DEBUG']) {
+                debmes('WEBHOOK: auto-created device ID=' . (int)$rec['ID'] . ' IP=' . $ip . ' mdid=' . trim($mdid), 'megad');
+            }
             $this->readConfig($rec['ID']);
         } else {
+            if ($this->config['API_DEBUG']) {
+                debmes('WEBHOOK: matched device ID=' . (int)$rec['ID'] . ' IP=' . $ip . ' mdid=' . trim($mdid) . ' URI=' . $request_uri, 'megad');
+            }
             //processing
             /*
             global $pt; //port
@@ -545,6 +552,9 @@ class megad extends module
 
 
             if (isset($_GET['all'])) {
+                if ($this->config['API_DEBUG']) {
+                    debmes('WEBHOOK: incoming all= payload for device ID=' . (int)$rec['ID'], 'megad');
+                }
                 $this->readValues($rec['ID'], $_GET['all']);
                 return;
             }
@@ -633,6 +643,9 @@ class megad extends module
             }
             foreach ($commands as $command) {
                 $this->processCommand($rec['ID'], $command, 1);
+            }
+            if ($this->config['API_DEBUG']) {
+                debmes('WEBHOOK: processed ' . count($commands) . ' command(s) for device ID=' . (int)$rec['ID'] . ($ecmd ? ' ecmd=' . $ecmd : ''), 'megad');
             }
         }
 
@@ -729,20 +742,64 @@ class megad extends module
         if ($old_value != $prop['CURRENT_VALUE_STRING']) {
             $prop['UPDATED'] = date('Y-m-d H:i:s');
             SQLUpdate('megadproperties', $prop);
+            if ($this->config['API_DEBUG']) {
+                debmes(
+                    'CMD: device=' . (int)$device_id .
+                    ' num=' . $prop['NUM'] .
+                    ' cmd=' . $prop['COMMAND'] .
+                    ' idx=' . (int)$prop['COMMAND_INDEX'] .
+                    ' old=' . $old_value .
+                    ' new=' . $prop['CURRENT_VALUE_STRING'],
+                    'megad'
+                );
+            }
         }
         if ($prop['LINKED_OBJECT'] && $prop['LINKED_PROPERTY']) {
             if ($force || $old_value != $prop['CURRENT_VALUE_STRING'] || $prop['CURRENT_VALUE_STRING'] != gg($prop['LINKED_OBJECT'] . '.' . $prop['LINKED_PROPERTY'])) {
                 setGlobal($prop['LINKED_OBJECT'] . '.' . $prop['LINKED_PROPERTY'], $prop['CURRENT_VALUE_STRING'], array($this->name => '0'));
+                if ($this->config['API_DEBUG']) {
+                    debmes(
+                        'CMD: setGlobal ' . $prop['LINKED_OBJECT'] . '.' . $prop['LINKED_PROPERTY'] .
+                        '=' . $prop['CURRENT_VALUE_STRING'],
+                        'megad'
+                    );
+                }
             }
         }
-        if ($force || $prop['LINKED_OBJECT'] && $prop['LINKED_METHOD'] && ($old_value != $prop['CURRENT_VALUE_STRING'])) {
+        $method_should_call = ($force || ($prop['LINKED_OBJECT'] && $prop['LINKED_METHOD'] && ($old_value != $prop['CURRENT_VALUE_STRING'])));
+        if ($method_should_call) {
             $params = array();
             $params['TITLE'] = $record['TITLE'];
             $params['VALUE'] = $prop['CURRENT_VALUE_STRING'];
             $params['value'] = $prop['CURRENT_VALUE_STRING'];
             $params['port'] = $prop['NUM'];
+            $params['COMMAND'] = $prop['COMMAND'];
+            $params['COMMENT'] = $prop['COMMENT'];
+            $params['INDEX'] = (int)$prop['COMMAND_INDEX'];
             $params['m'] = $m;
+            if ($this->config['API_DEBUG']) {
+                debmes(
+                    'METHOD: call ' . $prop['LINKED_OBJECT'] . '.' . $prop['LINKED_METHOD'] .
+                    ' device=' . (int)$device_id .
+                    ' num=' . $prop['NUM'] .
+                    ' cmd=' . $prop['COMMAND'] .
+                    ' idx=' . (int)$prop['COMMAND_INDEX'] .
+                    ' value=' . $prop['CURRENT_VALUE_STRING'] .
+                    ' force=' . (int)$force,
+                    'megad'
+                );
+            }
             callMethod($prop['LINKED_OBJECT'] . '.' . $prop['LINKED_METHOD'], $params);
+        } elseif ($this->config['API_DEBUG'] && $prop['LINKED_METHOD']) {
+            debmes(
+                'METHOD: skip ' . $prop['LINKED_OBJECT'] . '.' . $prop['LINKED_METHOD'] .
+                ' device=' . (int)$device_id .
+                ' num=' . $prop['NUM'] .
+                ' cmd=' . $prop['COMMAND'] .
+                ' idx=' . (int)$prop['COMMAND_INDEX'] .
+                ' reason=no-change force=' . (int)$force,
+                'megad'
+            );
         }
     }
 
